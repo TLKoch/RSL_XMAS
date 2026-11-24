@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Scavenger hunt</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a31; --panel2:#18223f; --line:#26335a;
+    --text:#e8ecf7; --muted:#8e9bc0; --accent:#6ee7ff; --ok:#3ddc97; --bad:#ff5d6c;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.5}
+  body{min-height:100vh;background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(110,231,255,.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(155,89,255,.10), transparent 60%), var(--bg)}
+  .wrap{max-width:620px;margin:0 auto;padding:16px 16px 60px}
+  h1,h2,h3{line-height:1.2;margin:0 0 .5em}
+  .small{font-size:.85rem;color:var(--muted)}
+  .mono{font-family:var(--mono)}
+  .eyebrow{font:.75rem var(--mono);color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+  .spectrum{height:4px;border-radius:2px;margin:10px 0 18px;
+    background:linear-gradient(90deg,#3b7cff,#2fbf71,#e5484d,#c2185b,#9c27b0,#ff8a3d,#f5b400,#8d6e63)}
+
+  button{font:600 1rem var(--sans);border:0;border-radius:10px;padding:13px 16px;cursor:pointer;color:#06111f;background:var(--accent);width:100%}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:default}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+  .clue{font-size:1.1rem;background:var(--panel2);border-left:3px solid var(--accent);padding:12px 14px;border-radius:6px;margin:10px 0 16px}
+
+  .groups{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+  .groups button{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  .groups button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+
+  .top{position:sticky;top:0;z-index:5;background:rgba(11,16,32,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .top .in{max-width:620px;margin:0 auto;padding:10px 16px}
+  .top .row{display:flex;justify-content:space-between;align-items:center;font:.85rem var(--mono)}
+  .slots{display:flex;gap:6px;margin-top:8px}
+  .slots span{flex:1;height:34px;border-radius:8px;background:var(--panel);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font:700 1.05rem var(--mono);color:var(--muted)}
+  .slots span.got{background:var(--panel2);border-color:var(--accent);color:var(--accent)}
+  .slots span.now{border-color:var(--accent);border-style:dashed}
+
+  .opts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .opts button{text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--line);font-weight:500}
+  .opts button.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .q{font-weight:600;font-size:1.1rem}
+  .got-number{font:800 3.5rem/1 var(--mono);text-align:center;color:var(--accent);margin:8px 0 4px;text-shadow:0 0 24px rgba(110,231,255,.5)}
+
+  table.res{width:100%;border-collapse:collapse;font-size:.9rem}
+  table.res th{text-align:left;font:.72rem var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:6px 4px;border-bottom:1px solid var(--line)}
+  table.res td{padding:9px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.res td.n{font:700 1.2rem var(--mono);color:var(--accent);text-align:right;white-space:nowrap}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  .code{font:800 2rem var(--mono);letter-spacing:.25em;text-align:center;margin:6px 0 14px;color:var(--accent)}
+
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;max-width:420px;width:100%}
+  .modal .acts{display:flex;gap:8px;margin-top:16px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:999px;font-size:.92rem;z-index:30}
+  .hidden{display:none!important}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="config.js"></script>
+<script>
+const STORE = "hunt-progress-v2";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N = HUNT.stations.length;
+const hm = t => new Date(t).toLocaleTimeString("en-GB", {hour:"2-digit", minute:"2-digit"});
+
+/* state: group, phase ("clue" | "question"), answers: [{opt, t}] */
+let S = null;
+function load(){ try{ S = JSON.parse(localStorage.getItem(STORE)); }catch(e){ S = null; } }
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(e){} }
+function clearAll(){ try{ localStorage.removeItem(STORE); }catch(e){} S = null; }
+const idx = () => S.answers.length;           // current station (0-based)
+const done = () => S.answers.length >= N;
+
+function header(){
+  const slots = HUNT.stations.map((st, i) => {
+    const a = S.answers[i];
+    const cls = a ? "got" : (i === idx() ? "now" : "");
+    return `<span class="${cls}">${a ? esc(st.options[a.opt].number) : "·"}</span>`;
+  }).join("");
+  return `<div class="top"><div class="in">
+    <div class="row"><b>${esc(S.group)}</b><span>${done() ? "finished" : `station ${idx() + 1} / ${N}`}</span></div>
+    <div class="slots">${slots}</div></div></div>`;
+}
+
+function render(){
+  if (!S){ return viewStart(); }
+  if (done()) return viewFinal();
+  const i = idx(), st = HUNT.stations[i];
+  let body;
+  if (S.phase === "clue"){
+    const clue = i === 0 ? HUNT.firstClue : HUNT.stations[i - 1].nextClue;
+    const last = S.answers[i - 1];
+    body = `<div class="card">
+      ${last ? `<div class="eyebrow">Station ${i} · number collected</div>
+        <div class="got-number">${esc(HUNT.stations[i-1].options[last.opt].number)}</div>
+        <p class="small" style="text-align:center">Your answer: ${esc(HUNT.stations[i-1].options[last.opt].text)}</p>` : `<div class="eyebrow">Briefing</div><p>${esc(HUNT.intro)}</p>`}
+      <h2 style="margin-top:14px">Find station ${i + 1}</h2>
+      <div class="clue">${esc(clue)}</div>
+      <button id="arrive">We are at station ${i + 1}</button>
+    </div>`;
+  } else {
+    body = `<div class="card">
+      <div class="eyebrow">${esc(st.name)}</div>
+      <div class="q">${esc(st.question)}</div>
+      <div class="opts">${st.options.map((o, k) => `<button data-k="${k}">${esc(o.text)}</button>`).join("")}</div>
+      <p class="small" style="margin-top:12px">Choose carefully: the answer is locked in once confirmed.</p>
+    </div>`;
+  }
+  $("#app").innerHTML = header() + `<div class="wrap">${body}${footer()}</div>`;
+  if ($("#arrive")) $("#arrive").onclick = () => { S.phase = "question"; save(); render(); scrollTo(0,0); };
+  document.querySelectorAll(".opts button").forEach(b => b.onclick = () => {
+    const k = +b.dataset.k;
+    document.querySelectorAll(".opts button").forEach(x => x.classList.toggle("sel", x === b));
+    modal("Lock in this answer?", `<p>${esc(st.options[k].text)}</p>`, "Lock in", () => {
+      S.answers.push({opt:k, t:Date.now()}); S.phase = "clue"; save(); render(); scrollTo(0,0);
+    }, () => b.classList.remove("sel"));
+  });
+  wireFooter();
+}
+
+function viewStart(){
+  let chosen = null;
+  $("#app").innerHTML = `<div class="wrap" style="padding-top:40px">
+    <div class="eyebrow">Scavenger hunt</div>
+    <h1>${esc(HUNT.title)}</h1>
+    <div class="small">${esc(HUNT.subtitle)}</div>
+    <div class="spectrum"></div>
+    <p>Which group are you?</p>
+    <div class="groups">${HUNT.groups.map(g => `<button data-g="${esc(g)}">${esc(g)}</button>`).join("")}</div>
+    <button id="go" disabled>Start</button>
+  </div>`;
+  document.querySelectorAll(".groups button").forEach(b => b.onclick = () => {
+    chosen = b.dataset.g;
+    document.querySelectorAll(".groups button").forEach(x => x.classList.toggle("on", x === b));
+    $("#go").disabled = false;
+  });
+  $("#go").onclick = () => { S = {group:chosen, phase:"clue", answers:[], start:Date.now()}; save(); render(); };
+}
+
+function viewFinal(){
+  const lockSt = lockStations();
+  const rows = HUNT.stations.map((st, i) => {
+    const a = S.answers[i], o = st.options[a.opt];
+    const right = a.opt === st.correct;
+    return `<tr>
+      <td class="mono small">${i + 1}</td>
+      <td><div>${esc(st.question)}</div>
+        <div style="margin-top:4px"><b>${esc(o.text)}</b>
+        ${HUNT.revealCorrect ? (right ? ` <span class="ok">✓</span>` : ` <span class="bad">✗</span><div class="small">Correct: ${esc(st.options[st.correct].text)} (${esc(st.options[st.correct].number)})</div>`) : ""}</div></td>
+      <td class="n">${esc(o.number)}${lockSt.includes(i + 1) ? "" : `<div class="small" style="font-weight:400">not in code</div>`}</td></tr>`;
+  }).join("");
+  const code = lockSt.map(n => HUNT.stations[n - 1].options[S.answers[n - 1].opt].number).join("");
+  const score = S.answers.filter((a, i) => a.opt === HUNT.stations[i].correct).length;
+  $("#app").innerHTML = header() + `<div class="wrap">
+    <div class="card">
+      <div class="eyebrow">Mission complete</div>
+      <h2>${esc(S.group)}</h2>
+      <p>${esc(HUNT.finale)}</p>
+      <p class="small" style="text-align:center;margin-bottom:0">${esc((HUNT.lock && HUNT.lock.label) || "Your code")}</p>
+      <div class="code">${esc(code)}</div>
+      ${HUNT.revealCorrect ? `<p style="text-align:center">${score} of ${N} correct</p>` : ""}
+      <table class="res"><tr><th>#</th><th>Question and your answer</th><th style="text-align:right">No.</th></tr>${rows}</table>
+      <p class="small">Started ${hm(S.start)} · finished ${hm(S.answers[N-1].t)}</p>
+    </div>
+    <button class="ghost" id="copy">Copy results</button>
+    ${footer()}
+  </div>`;
+  $("#copy").onclick = () => {
+    const txt = `${S.group} · ${(HUNT.lock && HUNT.lock.label) || "Code"}: ${code}\n` + HUNT.stations.map((st, i) => `${i+1}. ${st.options[S.answers[i].opt].text} → ${st.options[S.answers[i].opt].number}`).join("\n");
+    const ok = () => toast("Results copied.");
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, () => fallback(txt, ok)); else fallback(txt, ok);
+  };
+  wireFooter();
+}
+
+function lockStations(){
+  const l = HUNT.lock && Array.isArray(HUNT.lock.stations) ? HUNT.lock.stations : null;
+  const ok = l && l.length && l.every(n => Number.isInteger(n) && n >= 1 && n <= N);
+  return ok ? l : HUNT.stations.map((_, i) => i + 1);
+}
+
+function footer(){ return `<p class="small" style="text-align:center;margin-top:28px"><a href="#" id="reset">Start over on this phone</a></p>`; }
+function wireFooter(){
+  const r = $("#reset"); if (!r) return;
+  r.onclick = e => { e.preventDefault(); modal("Start over?", "<p>All answers on this phone will be deleted.</p>", "Delete and restart", () => { clearAll(); render(); }); };
+}
+function fallback(txt, ok){
+  const t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select();
+  try{ document.execCommand("copy"); ok(); }catch(e){} t.remove();
+}
+function modal(title, html, okLabel, onOk, onCancel){
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<div class="box"><h3>${esc(title)}</h3>${html}<div class="acts"><button class="ghost" data-x>Cancel</button><button data-ok>${esc(okLabel)}</button></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector("[data-x]").onclick = () => { m.remove(); onCancel && onCancel(); };
+  m.querySelector("[data-ok]").onclick = () => { m.remove(); onOk(); };
+}
+let tt;
+function toast(t){
+  let el = $(".toast"); if (!el){ el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
+  el.textContent = t; el.classList.remove("hidden"); clearTimeout(tt); tt = setTimeout(() => el.classList.add("hidden"), 2200);
+}
+
+document.title = HUNT.title;
+load();
+if (S && (!Array.isArray(S.answers) || S.answers.length > N)) clearAll();
+render();
+</script>
+</body>
+</html>
